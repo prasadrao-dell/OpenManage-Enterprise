@@ -1,8 +1,5 @@
 #
-# Python script using OME API to get inventory data in CSV format.
-#
 # _author_ = Raajeev Kalyanaraman <Raajeev.Kalyanaraman@Dell.com>
-# _version_ = 0.1
 #
 #
 # Copyright (c) 2020 Dell EMC Corporation
@@ -21,24 +18,24 @@
 #
 
 """
-SYNOPSIS:
-    Script to get chassis inventory details in CSV format
+#### Synopsis
+Script to get chassis inventory details in CSV format
 
-DESCRIPTION:
-    This script exercises the OME REST API to get chassis inventory
-    in a CSV format for external consumption
-    Note that the credentials entered are not stored to disk.
+#### Description
+This script exercises the OME REST API to get chassis inventory
+in a CSV format for external consumption
+Note that the credentials entered are not stored to disk.
 
-EXAMPLE:
-    python get_chassis_inventory.py -i <ip addr> -u admin -p <password>
+#### Python Example
+`python get_chassis_inventory.py -i <ip addr> -u admin -p <password>`
 """
-import sys
 import argparse
-from argparse import RawTextHelpFormatter
+import csv
 import json
+from argparse import RawTextHelpFormatter
+
 import requests
 import urllib3
-import csv
 
 
 def authenticate_with_ome(ip_address, user_name, password):

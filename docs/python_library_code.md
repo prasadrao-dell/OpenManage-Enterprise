@@ -41,7 +41,17 @@ Used to create a session to OME. You can then pass the resulting dictionary head
 
 This is used to perform any sort of interaction with a REST API resource. It includes the ability to pass in odata filters. Anytime you need to POST or GET an API resource we recommend you use this function.
 
-    def get_data(authenticated_headers: dict, url: str, odata_filter: str = None) -> list:
+    from urllib.parse import urlparse
+
+    try:
+        import urllib3
+        import requests
+    except ModuleNotFoundError:
+        print("This program requires urllib3 and requests. To install them on most systems run `pip install requests"
+              "urllib3`")
+        sys.exit(0)
+
+    def get_data(authenticated_headers: dict, url: str, odata_filter: str = None, max_pages: int = None) -> list:
         """
         This function retrieves data from a specified URL. Get requests from OME return paginated data. The code below
         handles pagination. This is the equivalent in the UI of a list of results that require you to go to different
@@ -51,6 +61,7 @@ This is used to perform any sort of interaction with a REST API resource. It inc
             authenticated_headers: A dictionary of HTTP headers generated from an authenticated session with OME
             url: The API url against which you would like to make a request
             odata_filter: An optional parameter for providing an odata filter to run against the API endpoint.
+            max_pages: The maximum number of pages you would like to return
 
         Returns: Returns a list of dictionaries of the data received from OME
 
@@ -61,6 +72,11 @@ This is used to perform any sort of interaction with a REST API resource. It inc
         if odata_filter:
             count_data = requests.get(url + '?$filter=' + odata_filter, headers=authenticated_headers, verify=False)
 
+            if count_data.status_code == 400:
+                print("Received an error while retrieving data from %s:" % url + '?$filter=' + odata_filter)
+                pprint(count_data.json()['error'])
+                return []
+
             count_data = count_data.json()
             if count_data['@odata.count'] <= 0:
                 print("No results found!")
@@ -68,12 +84,23 @@ This is used to perform any sort of interaction with a REST API resource. It inc
         else:
             count_data = requests.get(url, headers=authenticated_headers, verify=False).json()
 
-        data = count_data['value']
+        if 'value' in count_data:
+            data = count_data['value']
+        else:
+            data = count_data
+
         if '@odata.nextLink' in count_data:
             # Grab the base URI
-            next_link_url = '{uri.scheme}://{uri.netloc}/'.format(uri=urlparse(url)) + count_data['@odata.nextLink']
+            next_link_url = '{uri.scheme}://{uri.netloc}'.format(uri=urlparse(url)) + count_data['@odata.nextLink']
 
+        i = 1
         while next_link_url is not None:
+            # Break if we have reached the maximum number of pages to be returned
+            if max_pages:
+                if i >= max_pages:
+                    break
+                else:
+                    i = i + 1
             response = requests.get(next_link_url, headers=authenticated_headers, verify=False)
             next_link_url = None
             if response.status_code == 200:
@@ -85,12 +112,13 @@ This is used to perform any sort of interaction with a REST API resource. It inc
                 # The @odata.nextLink key is only present in data if there are additional pages. We check for it and if it
                 # is present we get a link to the page with the next set of results.
                 if '@odata.nextLink' in requested_data:
-                    next_link_url = '{uri.scheme}://{uri.netloc}/'.format(uri=urlparse(url)) + \
+                    next_link_url = '{uri.scheme}://{uri.netloc}'.format(uri=urlparse(url)) + \
                                     requested_data['@odata.nextLink']
-                if data is None:
-                    data = requested_data["value"]
+
+                if 'value' in requested_data:
+                    data += requested_data['value']
                 else:
-                    data += requested_data["value"]
+                    data += requested_data
             else:
                 print("Unknown error occurred. Received HTTP response code: " + str(response.status_code) +
                     " with error: " + response.text)
@@ -103,114 +131,115 @@ This is used to perform any sort of interaction with a REST API resource. It inc
 
 Use this function to resolve a service tag, idrac IP, or an OME device name to its OME device ID. Most API resources require you to use the device ID to take action. Use this function to resolve any of the above to the OME device ID.
 
-    def resolve_device_id(authenticated_headers: dict,
-                        ome_ip_address: str,
-                        service_tag: str = None,
-                        device_idrac_ip: str = None,
-                        device_name: str = None) -> int:
-        """
-        Resolves a service tag, idrac IP or device name to a device ID
+    def get_device_id(authenticated_headers: dict,
+                  ome_ip_address: str,
+                  service_tag: str = None,
+                  device_idrac_ip: str = None,
+                  device_name: str = None) -> int:
+    """
+    Resolves a service tag, idrac IP or device name to a device ID
 
-        Args:
-            authenticated_headers: A dictionary of HTTP headers generated from an authenticated session with OME
-            ome_ip_address: IP address of the OME server
-            service_tag: (optional) The service tag of a host
-            device_idrac_ip: (optional) The idrac IP of a host
-            device_name: (optional): The name of a host
+    Args:
+        authenticated_headers: A dictionary of HTTP headers generated from an authenticated session with OME
+        ome_ip_address: IP address of the OME server
+        service_tag: (optional) The service tag of a host
+        device_idrac_ip: (optional) The idrac IP of a host
+        device_name: (optional): The name of a host
 
-        Returns: Returns the device ID or -1 if it couldn't be found
-        """
-
-        device_id = -1
+    Returns: Returns the device ID or -1 if it couldn't be found
+    """
 
         if not service_tag and not device_idrac_ip and not device_name:
-            print("No argument provided to resolve_device_id. Must provide service tag, device idrac IP or device name.")
+            print("No argument provided to get_device_id. Must provide service tag, device idrac IP or device name.")
             return -1
-
+    
         # If the user passed a device name, resolve that name to a device ID
         if device_name:
             device_id = get_data(authenticated_headers, "https://%s/api/DeviceService/Devices" % ome_ip_address,
-                                    "DeviceName eq \'%s\'" % device_name)
-            if not device_id:
+                                 "DeviceName eq \'%s\'" % device_name)
+            if len(device_id) == 0:
                 print("Error: We were unable to find device name " + device_name + " on this OME server. Exiting.")
-                sys.exit(0)
-            else:
-                device_id = device_id[0]['Id']
+                return -1
+    
+            device_id = device_id[0]['Id']
+    
         elif service_tag:
             device_id = get_data(authenticated_headers, "https://%s/api/DeviceService/Devices" % ome_ip_address,
-                                    "DeviceServiceTag eq \'%s\'" % service_tag)
-
-            if not device_id:
+                                 "DeviceServiceTag eq \'%s\'" % service_tag)
+    
+            if len(device_id) == 0:
                 print("Error: We were unable to find service tag " + service_tag + " on this OME server. Exiting.")
-                sys.exit(0)
-            else:
-                device_id = device_id[0]['Id']
+                return -1
+    
+            device_id = device_id[0]['Id']
+    
         elif device_idrac_ip:
-            device_list = get_data(authenticated_headers, "https://%s/api/DeviceService/Devices" % ome_ip_address)
-
-            if not device_list:
-                print("Unable to get device list from %s. This could happen for many reasons but the most likely is a"
-                    " failure in the connection." % ome_ip_address)
-                sys.exit(0)
-
-            if len(device_list) <= 0:
-                print("No devices found on this OME server: " + ome_ip_address + ". Exiting.")
-                sys.exit(0)
-
-            for device_dictionary in device_list:
-                if device_dictionary['DeviceManagement'][0]['NetworkAddress'] == device_idrac_ip.strip():
-                    device_id = device_dictionary['Id']
-                    break
-
-            if not device_idrac_ip:
+            device_id = -1
+            device_ids = get_data(authenticated_headers, "https://%s/api/DeviceService/Devices" % ome_ip_address,
+                                  "DeviceManagement/any(d:d/NetworkAddress eq '%s')" % device_idrac_ip)
+    
+            if len(device_ids) == 0:
                 print("Error: We were unable to find idrac IP " + device_idrac_ip + " on this OME server. Exiting.")
-                sys.exit(0)
-
+                return -1
+    
+            # TODO - This is necessary because the filter above could possibly return mulitple results
+            # TODO - See https://github.com/dell/OpenManage-Enterprise/issues/87
+            for device_id in device_ids:
+                if device_id['DeviceManagement'][0]['NetworkAddress'] == device_idrac_ip:
+                    device_id = device_id['Id']
+    
+            if device_id == -1:
+                print("Error: We were unable to find idrac IP " + device_idrac_ip + " on this OME server. Exiting.")
+                return -1
+        else:
+            device_id = -1
+    
         return device_id
 
-## Retrieving a group using its ID
+### Helpful device ID pattern 
+You frequently not only want to resolve device IDs, but check the output and then add the device IDs to a list of IDs. Below is a common pattern for this behavior.
 
-If you need to retrieve a group by ID, use this function.
+        target_ids = []
 
-    def get_group_id_by_name(ome_ip_address: str, group_name: str, authenticated_headers: dict) -> int:
-        """
-        Retrieves the ID of a group given its name.
+        if args.service_tags:
+            service_tags = args.service_tags.split(',')
+            for service_tag in service_tags:
+                target = get_device_id(headers, args.ip, service_tag=service_tag)
+                if target != -1:
+                    target_ids.append(target)
+                else:
+                    print("Could not resolve ID for: " + service_tag)
+        else:
+            service_tags = None
 
-        Args:
-            ome_ip_address: The IP address of the OME server
-            group_name: The name of the group whose ID you want to resolve.
-            authenticated_headers: Headers used for authentication to the OME server
+        if args.idrac_ips:
+            device_idrac_ips = args.idrac_ips.split(',')
+            for device_idrac_ip in device_idrac_ips:
+                target = get_device_id(headers, args.ip, device_idrac_ip=device_idrac_ip)
+                if target != -1:
+                    target_ids.append(target)
+                else:
+                    print("Could not resolve ID for: " + device_idrac_ip)
+        else:
+            device_idrac_ips = None
 
-        Returns: Returns the ID of the group as an integer or -1 if it couldn't be found.
-
-        """
-
-        print("Searching for the requested group.")
-        groups_url = "https://%s/api/GroupService/Groups?$filter=Name eq '%s'" % (ome_ip_address, group_name)
-
-        group_response = requests.get(groups_url, headers=authenticated_headers, verify=False)
-
-        if group_response.status_code == 200:
-            json_data = json.loads(group_response.content)
-
-            if json_data['@odata.count'] > 1:
-                print("WARNING: We found more than one name that matched the group name: " + group_name +
-                    ". We are picking the first entry.")
-            if json_data['@odata.count'] == 1 or json_data['@odata.count'] > 1:
-                group_id = json_data['value'][0]['Id']
-                if not isinstance(group_id, int):
-                    print("The server did not return an integer ID. Something went wrong.")
-                    return -1
-                return group_id
-            print("Error: We could not find the group " + group_name + ". Exiting.")
-            return -1
-        print("Unable to retrieve groups. Exiting.")
-        return -1
+        if args.device_names:
+            device_names = args.device_names.split(',')
+            for device_name in device_names:
+                target = get_device_id(headers, args.ip, device_name=device_name)
+                if target != -1:
+                    target_ids.append(target)
+                else:
+                    print("Could not resolve ID for: " + device_name)
+        else:
+            device_names = None
 
 ## Track a Job to Completion
 
 Track a job and wait for it to complete before continuing.
 
+    from pprint import pprint
+    
     def track_job_to_completion(ome_ip_address: str,
                                 authenticated_headers: dict,
                                 tracked_job_id,
@@ -264,12 +293,12 @@ Track a job and wait for it to complete before continuing.
                     print("Job completed successfully!")
                     break
                 elif int(job_status) in failed_job_status:
-                    job_incomplete = False
+                    job_incomplete = True
 
                     if job_status_str == "Warning":
                         print("Completed with errors")
                     else:
-                        print("Discovering of device failed... ")
+                        print("Error: Job failed.")
 
                     job_hist_url = str(job_url) + "/ExecutionHistories"
                     job_hist_resp = requests.get(job_hist_url, headers=authenticated_headers, verify=False)

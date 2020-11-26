@@ -1,8 +1,5 @@
 #
-# Python script using OME API to create a new static group
-#
-# _maintained_by_ = Grant Curell <grant_curell@dell.com>
-# _version_ = 0.2
+# _maintainer_ = Grant Curell <grant_curell@dell.com>
 #
 # Copyright (c) 2020 Dell EMC Corporation
 #
@@ -18,30 +15,33 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
+#### Synopsis
+Script to discover devices managed by OME Enterprise
 
-SYNOPSIS:
-   Script to discover devices managed by OM Enterprise
-DESCRIPTION:
-   This script exercises the OME REST API to discover devices.
-   For authentication X-Auth is used over Basic Authentication.
-   Note that the credentials entered are not stored to disk.
+#### Description
+This script exercises the OME REST API to discover devices.
+For authentication X-Auth is used over Basic Authentication.
+Note that the credentials entered are not stored to disk.
 
-EXAMPLE:
-   python invoke_discover_device.py --ip <ip addr> --user admin
-    --password <passwd> --targetUserName <user name>
-    --targetPassword <password> --deviceType <{Device_Type}>
-    --targetIpAddresses <10.xx.xx.x,10.xx.xx.xx-10.yy.yy.yy,10.xx.xx.xx> or --targetIpAddrCsvFile xyz.csv
-    where {Device_Type} can be server,chassis
+#### Python Example
+```bash
+python invoke_discover_device.py --ip <ip addr> --user admin
+--password <passwd> --targetUserName <user name>
+--targetPassword <password> --deviceType <{Device_Type}>
+--targetIpAddresses <10.xx.xx.x,10.xx.xx.xx-10.yy.yy.yy,10.xx.xx.xx> or --targetIpAddrCsvFile xyz.csv
+```
+where {Device_Type} can be server,chassis
 """
 
-import os
-import csv
-import time
 import argparse
+import csv
 import json
+import os
 import sys
+import time
 from argparse import RawTextHelpFormatter
 from pprint import pprint
+
 try:
     import urllib3
     import requests
@@ -292,12 +292,12 @@ def track_job_to_completion(ome_ip_address: str,
                 print("Job completed successfully!")
                 break
             elif int(job_status) in failed_job_status:
-                job_incomplete = False
+                job_incomplete = True
 
                 if job_status_str == "Warning":
                     print("Completed with errors")
                 else:
-                    print("Discovering of device failed... ")
+                    print("Error: Job failed.")
 
                 job_hist_url = str(job_url) + "/ExecutionHistories"
                 job_hist_resp = requests.get(job_hist_url, headers=authenticated_headers, verify=False)
@@ -329,7 +329,7 @@ if __name__ == '__main__':
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=RawTextHelpFormatter)
     parser.add_argument("--ip", required=True, help="OME Appliance IP")
-    parser.add_argument("--user", required=True,
+    parser.add_argument("--user", required=False,
                         help="Username for OME Appliance",
                         default="admin")
     parser.add_argument("--password", required=True,

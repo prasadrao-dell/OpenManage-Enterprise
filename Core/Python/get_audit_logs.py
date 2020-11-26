@@ -1,8 +1,5 @@
 #
-#  Python script using OME API to create a new static group
-#
 # _author_ = Grant Curell <grant_curell@dell.com>
-# _version_ = 0.1
 #
 # Copyright (c) 2020 Dell EMC Corporation
 #
@@ -20,24 +17,26 @@
 #
 
 """
-SYNOPSIS:
-   Retrieves the audit logs from a target OME instance and can either save them in an CSV on a fileshare or 
-   print them to screen.
+#### Synopsis
+Retrieves the audit logs from a target OME instance and can either save them in an CSV on a fileshare or 
+print them to screen.
 
-DESCRIPTION:
-    It performs X-Auth with basic authentication. Note: Credentials are not stored on disk.
+#### Description
+It performs X-Auth with basic authentication. Note: Credentials are not stored on disk.
 
-EXAMPLE:
-   python get_audit_logs.py -i 192.168.1.93 -u admin -p somepass --share \\192.168.1.7\gelante\test.csv --smbuser someuser --smbpass somepass
+#### Python Example
+`python get_audit_logs.py -i 192.168.1.93 -u admin -p somepass
+--share \\192.168.1.7\gelante\test.csv --smbuser someuser --smbpass somepass`
 """
 
-from argparse import RawTextHelpFormatter
-from urllib.parse import urlparse
-from pprint import pprint
-import json
 import argparse
-import sys
 import csv
+import json
+import sys
+from argparse import RawTextHelpFormatter
+from pprint import pprint
+from urllib.parse import urlparse
+
 try:
     import urllib3
     import requests
@@ -55,7 +54,8 @@ except ImportError as error:
     print("You can ignore this if you do not plan on using Kerberos for authentication.")
     print("-----------------")
 except OSError as error:
-    print("Encountered an OS error. This usually means you are missing kerberos dependencies. The error was:", str(error))
+    print("Encountered an OS error. This usually means you are missing kerberos dependencies. The error was:",
+          str(error))
     sys.exit(0)
 
 
@@ -93,7 +93,7 @@ def authenticate(ome_ip_address: str, ome_username: str, ome_password: str) -> d
                     "password, and IP?")
 
 
-def get_data(authenticated_headers: dict, url: str, odata_filter: str = None) -> list:
+def get_data(authenticated_headers: dict, url: str, odata_filter: str = None, max_pages: int = None) -> list:
     """
     This function retrieves data from a specified URL. Get requests from OME return paginated data. The code below
     handles pagination. This is the equivalent in the UI of a list of results that require you to go to different
@@ -103,6 +103,7 @@ def get_data(authenticated_headers: dict, url: str, odata_filter: str = None) ->
         authenticated_headers: A dictionary of HTTP headers generated from an authenticated session with OME
         url: The API url against which you would like to make a request
         odata_filter: An optional parameter for providing an odata filter to run against the API endpoint.
+        max_pages: The maximum number of pages you would like to return
 
     Returns: Returns a list of dictionaries of the data received from OME
 
@@ -113,6 +114,11 @@ def get_data(authenticated_headers: dict, url: str, odata_filter: str = None) ->
     if odata_filter:
         count_data = requests.get(url + '?$filter=' + odata_filter, headers=authenticated_headers, verify=False)
 
+        if count_data.status_code == 400:
+            print("Received an error while retrieving data from %s:" % url + '?$filter=' + odata_filter)
+            pprint(count_data.json()['error'])
+            return []
+
         count_data = count_data.json()
         if count_data['@odata.count'] <= 0:
             print("No results found!")
@@ -120,12 +126,23 @@ def get_data(authenticated_headers: dict, url: str, odata_filter: str = None) ->
     else:
         count_data = requests.get(url, headers=authenticated_headers, verify=False).json()
 
-    data = count_data['value']
+    if 'value' in count_data:
+        data = count_data['value']
+    else:
+        data = count_data
+
     if '@odata.nextLink' in count_data:
         # Grab the base URI
-        next_link_url = '{uri.scheme}://{uri.netloc}/'.format(uri=urlparse(url)) + count_data['@odata.nextLink']
+        next_link_url = '{uri.scheme}://{uri.netloc}'.format(uri=urlparse(url)) + count_data['@odata.nextLink']
 
+    i = 1
     while next_link_url is not None:
+        # Break if we have reached the maximum number of pages to be returned
+        if max_pages:
+            if i >= max_pages:
+                break
+            else:
+                i = i + 1
         response = requests.get(next_link_url, headers=authenticated_headers, verify=False)
         next_link_url = None
         if response.status_code == 200:
@@ -137,12 +154,13 @@ def get_data(authenticated_headers: dict, url: str, odata_filter: str = None) ->
             # The @odata.nextLink key is only present in data if there are additional pages. We check for it and if it
             # is present we get a link to the page with the next set of results.
             if '@odata.nextLink' in requested_data:
-                next_link_url = '{uri.scheme}://{uri.netloc}/'.format(uri=urlparse(url)) + \
+                next_link_url = '{uri.scheme}://{uri.netloc}'.format(uri=urlparse(url)) + \
                                 requested_data['@odata.nextLink']
-            if data is None:
-                data = requested_data["value"]
+
+            if 'value' in requested_data:
+                data += requested_data['value']
             else:
-                data += requested_data["value"]
+                data += requested_data
         else:
             print("Unknown error occurred. Received HTTP response code: " + str(response.status_code) +
                   " with error: " + response.text)

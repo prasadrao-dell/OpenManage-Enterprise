@@ -1,11 +1,14 @@
 ﻿<#
 _author_ = Raajeev Kalyanaraman <raajeev.kalyanaraman@Dell.com>
-_version_ = 0.1
+
 Copyright (c) 2020 Dell EMC Corporation
+
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
+
       http://www.apache.org/licenses/LICENSE-2.0
+
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -36,7 +39,7 @@ limitations under the License.
    .\Update-InstalledFirmware.ps1 -IpAddress "10.xx.xx.xx" -Credentials
     $cred -DupFile .\BIOSxxxx.EXE -DeviceId 25234
  .EXAMPLE
-   .\Update-InstalledFirmware.ps1 -IpAddress "10.xx.xx.xx" -DupFile .\BIOSxxxx.EXE
+   .\Update-InstalledFirmwareWithDup.ps1 -IpAddress "10.xx.xx.xx" -DupFile .\BIOSxxxx.EXE
     -GroupId 1010
    In this instance you will be prompted for credentials to use to
    connect to the appliance

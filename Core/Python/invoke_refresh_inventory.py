@@ -1,8 +1,5 @@
 #
-#  Python script using OME API to create a new static group
-#
 # _author_ = Grant Curell <grant_curell@dell.com>
-# _version_ = 0.1
 #
 # Copyright (c) 2020 Dell EMC Corporation
 #
@@ -20,25 +17,25 @@
 #
 
 """
-SYNOPSIS:
-   Refreshes the inventory on a set of target devices
+#### Synopsis
+Refreshes the inventory on a set of target devices. This includes the configuration inventory tab.
 
-DESCRIPTION:
-    This script uses the OME REST API to refresh the inventory of a targeted server. It performs X-Auth
-    with basic authentication. Note: Credentials are not stored on disk.
+#### Description
+This script uses the OME REST API to refresh the inventory of a targeted server. It performs X-Auth
+with basic authentication. Note: Credentials are not stored on disk.
 
-EXAMPLE:
-   python refresh_device_inventory.py -i 192.168.1.93 -u admin -p somepass --idrac-ips 192.168.1.63,192.168.1.45
+#### Python Example
+`python invoke_refresh_inventory.py -i 192.168.1.93 -u admin -p somepass --idrac-ips 192.168.1.63,192.168.1.45`
 """
 
-from argparse import RawTextHelpFormatter
-from urllib.parse import urlparse
-from typing import List
-from pprint import pprint
-import json
 import argparse
-import time
+import json
 import sys
+import time
+from argparse import RawTextHelpFormatter
+from pprint import pprint
+from typing import List
+from urllib.parse import urlparse
 
 try:
     import urllib3
@@ -119,7 +116,7 @@ def get_group_id_by_name(ome_ip_address: str, group_name: str, authenticated_hea
     return -1
 
 
-def get_data(authenticated_headers: dict, url: str, odata_filter: str = None) -> list:
+def get_data(authenticated_headers: dict, url: str, odata_filter: str = None, max_pages: int = None) -> list:
     """
     This function retrieves data from a specified URL. Get requests from OME return paginated data. The code below
     handles pagination. This is the equivalent in the UI of a list of results that require you to go to different
@@ -129,6 +126,7 @@ def get_data(authenticated_headers: dict, url: str, odata_filter: str = None) ->
         authenticated_headers: A dictionary of HTTP headers generated from an authenticated session with OME
         url: The API url against which you would like to make a request
         odata_filter: An optional parameter for providing an odata filter to run against the API endpoint.
+        max_pages: The maximum number of pages you would like to return
 
     Returns: Returns a list of dictionaries of the data received from OME
 
@@ -139,6 +137,11 @@ def get_data(authenticated_headers: dict, url: str, odata_filter: str = None) ->
     if odata_filter:
         count_data = requests.get(url + '?$filter=' + odata_filter, headers=authenticated_headers, verify=False)
 
+        if count_data.status_code == 400:
+            print("Received an error while retrieving data from %s:" % url + '?$filter=' + odata_filter)
+            pprint(count_data.json()['error'])
+            return []
+
         count_data = count_data.json()
         if count_data['@odata.count'] <= 0:
             print("No results found!")
@@ -146,12 +149,23 @@ def get_data(authenticated_headers: dict, url: str, odata_filter: str = None) ->
     else:
         count_data = requests.get(url, headers=authenticated_headers, verify=False).json()
 
-    data = count_data['value']
+    if 'value' in count_data:
+        data = count_data['value']
+    else:
+        data = count_data
+
     if '@odata.nextLink' in count_data:
         # Grab the base URI
-        next_link_url = '{uri.scheme}://{uri.netloc}/'.format(uri=urlparse(url)) + count_data['@odata.nextLink']
+        next_link_url = '{uri.scheme}://{uri.netloc}'.format(uri=urlparse(url)) + count_data['@odata.nextLink']
 
+    i = 1
     while next_link_url is not None:
+        # Break if we have reached the maximum number of pages to be returned
+        if max_pages:
+            if i >= max_pages:
+                break
+            else:
+                i = i + 1
         response = requests.get(next_link_url, headers=authenticated_headers, verify=False)
         next_link_url = None
         if response.status_code == 200:
@@ -163,12 +177,13 @@ def get_data(authenticated_headers: dict, url: str, odata_filter: str = None) ->
             # The @odata.nextLink key is only present in data if there are additional pages. We check for it and if it
             # is present we get a link to the page with the next set of results.
             if '@odata.nextLink' in requested_data:
-                next_link_url = '{uri.scheme}://{uri.netloc}/'.format(uri=urlparse(url)) + \
+                next_link_url = '{uri.scheme}://{uri.netloc}'.format(uri=urlparse(url)) + \
                                 requested_data['@odata.nextLink']
-            if data is None:
-                data = requested_data["value"]
+
+            if 'value' in requested_data:
+                data += requested_data['value']
             else:
-                data += requested_data["value"]
+                data += requested_data
         else:
             print("Unknown error occurred. Received HTTP response code: " + str(response.status_code) +
                   " with error: " + response.text)
@@ -231,12 +246,12 @@ def track_job_to_completion(ome_ip_address: str,
                 print("Job completed successfully!")
                 break
             elif int(job_status) in failed_job_status:
-                job_incomplete = False
+                job_incomplete = True
 
                 if job_status_str == "Warning":
                     print("Completed with errors")
                 else:
-                    print("Discovering of device failed... ")
+                    print("Error: Job failed.")
 
                 job_hist_url = str(job_url) + "/ExecutionHistories"
                 job_hist_resp = requests.get(job_hist_url, headers=authenticated_headers, verify=False)
@@ -264,11 +279,11 @@ def track_job_to_completion(ome_ip_address: str,
     return True
 
 
-def resolve_device_id(authenticated_headers: dict,
-                      ome_ip_address: str,
-                      service_tag: str = None,
-                      device_idrac_ip: str = None,
-                      device_name: str = None) -> int:
+def get_device_id(authenticated_headers: dict,
+                  ome_ip_address: str,
+                  service_tag: str = None,
+                  device_idrac_ip: str = None,
+                  device_name: str = None) -> int:
     """
     Resolves a service tag, idrac IP or device name to a device ID
 
@@ -282,50 +297,50 @@ def resolve_device_id(authenticated_headers: dict,
     Returns: Returns the device ID or -1 if it couldn't be found
     """
 
-    device_id = -1
-
     if not service_tag and not device_idrac_ip and not device_name:
-        print("No argument provided to resolve_device_id. Must provide service tag, device idrac IP or device name.")
+        print("No argument provided to get_device_id. Must provide service tag, device idrac IP or device name.")
         return -1
 
     # If the user passed a device name, resolve that name to a device ID
     if device_name:
         device_id = get_data(authenticated_headers, "https://%s/api/DeviceService/Devices" % ome_ip_address,
-                                  "DeviceName eq \'%s\'" % device_name)
-        if not device_id:
+                             "DeviceName eq \'%s\'" % device_name)
+        if len(device_id) == 0:
             print("Error: We were unable to find device name " + device_name + " on this OME server. Exiting.")
-            sys.exit(0)
-        else:
-            device_id = device_id[0]['Id']
+            return -1
+
+        device_id = device_id[0]['Id']
+
     elif service_tag:
         device_id = get_data(authenticated_headers, "https://%s/api/DeviceService/Devices" % ome_ip_address,
-                                  "DeviceServiceTag eq \'%s\'" % service_tag)
+                             "DeviceServiceTag eq \'%s\'" % service_tag)
 
-        if not device_id:
+        if len(device_id) == 0:
             print("Error: We were unable to find service tag " + service_tag + " on this OME server. Exiting.")
-            sys.exit(0)
-        else:
-            device_id = device_id[0]['Id']
+            return -1
+
+        device_id = device_id[0]['Id']
+
     elif device_idrac_ip:
-        device_list = get_data(authenticated_headers, "https://%s/api/DeviceService/Devices" % ome_ip_address)
+        device_id = -1
+        device_ids = get_data(authenticated_headers, "https://%s/api/DeviceService/Devices" % ome_ip_address,
+                              "DeviceManagement/any(d:d/NetworkAddress eq '%s')" % device_idrac_ip)
 
-        if not device_list:
-            print("Unable to get device list from %s. This could happen for many reasons but the most likely is a"
-                  " failure in the connection." % ome_ip_address)
-            sys.exit(0)
-
-        if len(device_list) <= 0:
-            print("No devices found on this OME server: " + ome_ip_address + ". Exiting.")
-            sys.exit(0)
-
-        for device_dictionary in device_list:
-            if device_dictionary['DeviceManagement'][0]['NetworkAddress'] == device_idrac_ip.strip():
-                device_id = device_dictionary['Id']
-                break
-
-        if not device_idrac_ip:
+        if len(device_ids) == 0:
             print("Error: We were unable to find idrac IP " + device_idrac_ip + " on this OME server. Exiting.")
-            sys.exit(0)
+            return -1
+
+        # TODO - This is necessary because the filter above could possibly return mulitple results
+        # TODO - See https://github.com/dell/OpenManage-Enterprise/issues/87
+        for device_id in device_ids:
+            if device_id['DeviceManagement'][0]['NetworkAddress'] == device_idrac_ip:
+                device_id = device_id['Id']
+
+        if device_id == -1:
+            print("Error: We were unable to find idrac IP " + device_idrac_ip + " on this OME server. Exiting.")
+            return -1
+    else:
+        device_id = -1
 
     return device_id
 
@@ -334,12 +349,13 @@ def refresh_device_inventory(authenticated_headers: dict,
                              ome_ip_address: str,
                              group_name: str,
                              skip_config_inventory: bool,
-                             device_ids: List[int] = None,
-                             service_tags: List[str] = None,
-                             device_idrac_ips: List[str] = None,
-                             device_names: List[str] = None):
+                             device_ids: list = None,
+                             service_tags: str = None,
+                             device_idrac_ips: str = None,
+                             device_names: str = None,
+                             ignore_group: bool = False):
     """
-    Gets a list of firmware baselines from OME
+    Refresh the inventory of targeted hosts
 
     Args:
         authenticated_headers: A dictionary of HTTP headers generated from an authenticated session with OME
@@ -350,42 +366,63 @@ def refresh_device_inventory(authenticated_headers: dict,
         service_tags: (optional) The service tag of a host whose inventory you want to refresh
         device_idrac_ips: (optional) The idrac IP of a host whose inventory you want to refresh
         device_names: (optional): The name of a host whose inventory you want to refresh
+        ignore_group: (optional): Controls whether you want to ignore using groups or not
     """
 
     jobs_url = "https://%s/api/JobService/Jobs" % ome_ip_address
 
-    targets = []
+    target_ids = []
 
     if service_tags:
+        service_tags = service_tags.split(',')
         for service_tag in service_tags:
-            target = resolve_device_id(authenticated_headers, ome_ip_address, service_tag=service_tag)
+            target = get_device_id(headers, ome_ip_address, service_tag=service_tag)
             if target != -1:
-                targets.append(target)
+                target_ids.append(target)
+            else:
+                print("Could not resolve ID for: " + service_tag)
 
     if device_idrac_ips:
+        device_idrac_ips = args.idrac_ips.split(',')
         for device_idrac_ip in device_idrac_ips:
-            target = resolve_device_id(authenticated_headers, ome_ip_address, device_idrac_ip=device_idrac_ip)
+            target = get_device_id(headers, ome_ip_address, device_idrac_ip=device_idrac_ip)
             if target != -1:
-                targets.append(target)
+                target_ids.append(target)
+            else:
+                print("Could not resolve ID for: " + device_idrac_ip)
 
     if device_names:
+        device_names = device_names.split(',')
         for device_name in device_names:
-            target = resolve_device_id(authenticated_headers, ome_ip_address, device_name=device_name)
+            target = get_device_id(headers, ome_ip_address, device_name=device_name)
             if target != -1:
-                targets.append(target)
+                target_ids.append(target)
+            else:
+                print("Could not resolve ID for: " + device_name)
 
     if device_ids:
         for device_id in device_ids:
-            targets.append(device_id)
+            target_ids.append(device_id)
 
-    group_id = get_group_id_by_name(ome_ip_address, group_name, authenticated_headers)
+    if not skip_config_inventory:
+        group_id = get_group_id_by_name(ome_ip_address, group_name, authenticated_headers)
 
-    if group_id == -1:
-        print("We were unable to find the ID for group name " + group_name + " ... exiting.")
-        sys.exit(0)
+        if group_id == -1:
+            print("We were unable to find the ID for group name " + group_name + " ... exiting.")
+            sys.exit(0)
+
+    if not ignore_group:
+        group_devices = get_data(headers, "https://%s/api/GroupService/Groups(%s)/Devices" % (ome_ip_address, group_id))
+
+        if len(group_devices) < 1:
+            print("Error: There was a problem retrieving the devices for group " + args.groupname + ". Exiting")
+            sys.exit(0)
+
+        for device in group_devices:
+            target_ids.append(device['Id'])
 
     targets_payload = []
-    for id_to_refresh in targets:
+    for id_to_refresh in target_ids:
         targets_payload.append({
             "Id": id_to_refresh,
             "Data": "",
@@ -505,6 +542,8 @@ def refresh_device_inventory(authenticated_headers: dict,
     else:
         print("Something went wrong. See text output above for more details.")
 
+    print("Inventory refresh complete!")
+
 
 if __name__ == '__main__':
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -542,6 +581,8 @@ if __name__ == '__main__':
                              " version change is reflected in idrac. A config inventory is launched in the GUI by "
                              "clicking \"Run inventory\" on quick links on the devices page. A regular inventory is "
                              "the same as clicking \"Run inventory\" on a specific device\'s page.")
+    parser.add_argument("--ignore-group", default=False, action='store_true', help="Used when you only want to run a"
+                        " regular inventory and you do not want to provide a group.")
     args = parser.parse_args()
 
     try:
@@ -551,32 +592,35 @@ if __name__ == '__main__':
             sys.exit(0)
 
         if args.device_ids:
-            DEVICE_IDS_ARG = args.device_ids.split(',')
+            device_ids_arg = args.device_ids.split(',')
         else:
-            DEVICE_IDS_ARG = None
+            device_ids_arg = None
         if args.service_tags:
-            SERVICE_TAGS_ARG = args.service_tags.split(',')
+            service_tags_arg = args.service_tags.split(',')
         else:
-            SERVICE_TAGS_ARG = None
+            service_tags_arg = None
         if args.idrac_ips:
-            IDRAC_IPS_ARG = args.idrac_ips.split(',')
+            idrac_ips_arg = args.idrac_ips.split(',')
         else:
-            IDRAC_IPS_ARG = None
+            idrac_ips_arg = None
         if args.device_names:
-            DEVICE_NAMES_ARG = args.device_names.split(',')
+            device_names_arg = args.device_names.split(',')
         else:
-            DEVICE_NAMES_ARG = None
-
-        if DEVICE_IDS_ARG is None and SERVICE_TAGS_ARG is None and IDRAC_IPS_ARG is None and DEVICE_NAMES_ARG is None:
-            print("Error: You must provide one or more of the following: device IDs, service tags, idrac IPs, or "
-                  "device names.")
-            sys.exit(0)
+            device_names_arg = None
 
         print("WARNING: To reflect firmware changes you may have to power cycle the server first before running this. "
               "It is situation dependent.")
 
-        refresh_device_inventory(headers, args.ip, args.groupname, args.skip_config_inventory, DEVICE_IDS_ARG,
-                                 SERVICE_TAGS_ARG, IDRAC_IPS_ARG, DEVICE_NAMES_ARG)
+        if args.groupname == 'All Devices':
+            print("WARNING: No argument was provided for groupname. Defaulting to \'All Devices\' for the "
+                  "inventory refresh. See help for details. This will also display if the argument  was manually set "
+                  "to \'All Devices\' and can be safely ignored. If you do not want to use a group AND you do not want"
+                  " to update the configuration inventory tab, use the --skip-config-inventory and --ignore-group"
+                  " switches together. If you want to use a group to update regular inventories only and not the"
+                  " configuration inventory tab use the --skip-config-inventory switch by itself.")
+
+        refresh_device_inventory(headers, args.ip, args.groupname, args.skip_config_inventory, device_ids_arg,
+                                 service_tags_arg, idrac_ips_arg, device_names_arg, args.ignore_group)
 
     except Exception as error:
         print("Unexpected error:", str(error))

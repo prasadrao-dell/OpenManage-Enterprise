@@ -1,7 +1,4 @@
 #
-# Python script using OME API to create a new static group
-#
-# _version_ = 0.1
 #
 # Copyright (c) 2020 Dell EMC Corporation
 #
@@ -18,29 +15,29 @@
 # limitations under the License.
 
 """
-SYNOPSIS:
- Script to perform template deployment on the target devices.
+#### Synopsis
+Script to perform template deployment on the target devices.
 
-Description: 
- This script performs template deployment.
+#### Description:
+This script performs template deployment. Note that the credentials entered are not stored to disk.
 
- Note that the credentials entered are not stored to disk.
-
-Example:
-python set_system_configuration.py --ip <ip addr> --user admin
-    --password <passwd> --sourceid <10089> --targetid/--groupid <10081>
+#### Python Example
+`python set_system_configuration.py --ip <ip addr> --user admin
+    --password <passwd> --sourceid <10089> --targetid/--groupid <10081>`
 """
 
-import sys
-import json
-import time
-import urllib3
 import argparse
+import json
+import sys
+import time
 from argparse import RawTextHelpFormatter
+
 import requests
+import urllib3
 from requests.packages.urllib3.exceptions import InsecureRequestWarning
 
 requests.packages.urllib3.disable_warnings(InsecureRequestWarning)
+
 
 # to disable urllib3 warnings while making an api call
 # urllib3.disable_warnings()
@@ -299,7 +296,7 @@ if __name__ == '__main__':
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=RawTextHelpFormatter)
     parser.add_argument("--ip", required=True, help="OME Appliance IP")
-    parser.add_argument("--user", required=True,
+    parser.add_argument("--user", required=False,
                         help="Username for OME Appliance",
                         default="admin")
     parser.add_argument("--password", required=True,

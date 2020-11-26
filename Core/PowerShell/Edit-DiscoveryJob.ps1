@@ -1,4 +1,22 @@
 <#
+_author_ = Raajeev Kalyanaraman <raajeev.kalyanaraman@Dell.com>
+
+Copyright (c) 2020 Dell EMC Corporation
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+#>
+
+<#
  .SYNOPSIS
    Script to update an existing discovery job in OME
 
@@ -19,11 +37,9 @@
   .PARAMETER IpArray
   Array of Ip addresses
   
-   .EXAMPLE
-  $cred = Get-Credential
-  .\Edit-DiscoveryJob --IpAddress "10.xx.xx.xx" -Credentials $cred -JobNamePattern "Discovery_Essentials_IP" -DeviceUserName "root" -DevicePassword "test12" -IpArray 10.xx.xx.xx,10.xx.xx.xx
-   
-   In this instance you will be prompted for credentials
+ .EXAMPLE
+   $cred = Get-Credential
+   .\Edit-DiscoveryJob --IpAddress "10.xx.xx.xx" -Credentials $cred -JobNamePattern "Discovery_Essentials_IP" -DeviceUserName "root" -DevicePassword "test12" -IpArray 10.xx.xx.xx,10.xx.xx.xx
 #>
 [CmdletBinding()]
 param(

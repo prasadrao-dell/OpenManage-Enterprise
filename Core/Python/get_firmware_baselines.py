@@ -1,8 +1,5 @@
 #
-#  Python script using OME API to create a new static group
-#
 # _author_ = Grant Curell <grant_curell@dell.com>
-# _version_ = 0.1
 #
 # Copyright (c) 2020 Dell EMC Corporation
 #
@@ -19,25 +16,26 @@
 # limitations under the License.
 #
 """
-SYNOPSIS:
-   Gets a list of all firmware baselines available from an OME server or baselines associated
-   with a specific device.
+#### Synopsis
+Gets a list of all firmware baselines available from an OME server or baselines associated
+with a specific device.
 
-DESCRIPTION:
-   This script exercises the OME REST API to find baselines associated
-   with a given server. For authentication X-Auth is used over Basic
-   Authentication. Note: The credentials entered are not stored to disk.
+#### Description
+This script exercises the OME REST API to find baselines associated
+with a given server. For authentication X-Auth is used over Basic
+Authentication. Note: The credentials entered are not stored to disk.
 
-EXAMPLE:
-   python get_firmware_baseline.py -i 192.168.1.93 -u admin -p somepass -r 192.168.1.45
+#### Python Example
+`python get_firmware_baseline.py -i 192.168.1.93 -u admin -p somepass -r 192.168.1.45`
 """
 
-import json
 import argparse
-import urllib3
-import requests
+import json
 from argparse import RawTextHelpFormatter
 from urllib.parse import urlparse
+
+import requests
+import urllib3
 
 
 def authenticate(ome_ip_address: str, ome_username: str, ome_password: str) -> dict:
@@ -94,6 +92,11 @@ def get_data(authenticated_headers: dict, url: str, odata_filter: str = None) ->
     if odata_filter:
         count_data = requests.get(url + '?$filter=' + odata_filter, headers=authenticated_headers, verify=False)
 
+        if count_data.status_code == 400:
+            print("Received an error while retrieving data from %s:" % url + '?$filter=' + odata_filter)
+            pprint(count_data.json()['error'])
+            return []
+
         count_data = count_data.json()
         if count_data['@odata.count'] <= 0:
             print("No results found!")
@@ -101,10 +104,14 @@ def get_data(authenticated_headers: dict, url: str, odata_filter: str = None) ->
     else:
         count_data = requests.get(url, headers=authenticated_headers, verify=False).json()
 
-    data = count_data['value']
+    if 'value' in count_data:
+        data = count_data['value']
+    else:
+        data = count_data
+
     if '@odata.nextLink' in count_data:
         # Grab the base URI
-        next_link_url = '{uri.scheme}://{uri.netloc}/'.format(uri=urlparse(url)) + count_data['@odata.nextLink']
+        next_link_url = '{uri.scheme}://{uri.netloc}'.format(uri=urlparse(url)) + count_data['@odata.nextLink']
 
     while next_link_url is not None:
         response = requests.get(next_link_url, headers=authenticated_headers, verify=False)
@@ -118,12 +125,13 @@ def get_data(authenticated_headers: dict, url: str, odata_filter: str = None) ->
             # The @odata.nextLink key is only present in data if there are additional pages. We check for it and if it
             # is present we get a link to the page with the next set of results.
             if '@odata.nextLink' in requested_data:
-                next_link_url = '{uri.scheme}://{uri.netloc}/'.format(uri=urlparse(url)) + \
+                next_link_url = '{uri.scheme}://{uri.netloc}'.format(uri=urlparse(url)) + \
                                 requested_data['@odata.nextLink']
-            if data is None:
-                data = requested_data["value"]
+
+            if 'value' in requested_data:
+                data += requested_data['value']
             else:
-                data += requested_data["value"]
+                data += requested_data
         else:
             print("Unknown error occurred. Received HTTP response code: " + str(response.status_code) +
                   " with error: " + response.text)
@@ -170,7 +178,7 @@ def get_firmware_baselines(authenticated_headers: dict,
     # If the user passed a device name, resolve that name to a device ID
     if device_name:
         device_id = get_data(authenticated_headers, "https://%s/api/DeviceService/Devices" % ome_ip_address,
-                                  "DeviceName eq \'%s\'" % device_name)
+                             "DeviceName eq \'%s\'" % device_name)
         if not device_id:
             print("Error: We were unable to find device name " + device_name + " on this OME server. Exiting.")
             exit(0)
@@ -178,7 +186,7 @@ def get_firmware_baselines(authenticated_headers: dict,
             device_id = device_id[0]['Id']
     elif service_tag:
         device_id = get_data(authenticated_headers, "https://%s/api/DeviceService/Devices" % ome_ip_address,
-                                  "DeviceServiceTag eq \'%s\'" % service_tag)
+                             "DeviceServiceTag eq \'%s\'" % service_tag)
 
         if not device_id:
             print("Error: We were unable to find service tag " + service_tag + " on this OME server. Exiting.")

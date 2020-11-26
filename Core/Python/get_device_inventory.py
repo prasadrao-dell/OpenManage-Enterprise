@@ -1,8 +1,5 @@
 #
-# Python script using OME API to get device inventory.
-#
 # _author_ = Raajeev Kalyanaraman <Raajeev.Kalyanaraman@Dell.com>
-# _version_ = 0.1
 #
 #
 # Copyright (c) 2020 Dell EMC Corporation
@@ -21,24 +18,23 @@
 #
 
 """
-SYNOPSIS:
-    Script to get the device inventory details
+#### Synopsis
+Script to get the device inventory details
 
-DESCRIPTION:
-    This script exercises the OME REST API to get detailed inventory
-    for a device given ID/Name/Service Tag
-    and Inventory type (os,cpus,disks,memory,controllers) of the device
-    Note that the credentials entered are not stored to disk.
+#### Description
+This script exercises the OME REST API to get detailed inventory
+for a device given ID/Name/Service Tag
+and Inventory type (os,cpus,disks,memory,controllers) of the device
+Note that the credentials entered are not stored to disk.
 
-EXAMPLE:
-    python get_device_inventory.py -i <ip addr> -u admin
-        -p <password> -fby Name -f "iDRAC-abcdef" -invtype os
-
+#### Python Example
+`python get_device_inventory.py -i <ip addr> -u admin
+    -p <password> -fby Name -f "iDRAC-abcdef" -invtype os`
 """
-import sys
 import argparse
-from argparse import RawTextHelpFormatter
 import json
+from argparse import RawTextHelpFormatter
+
 import requests
 import urllib3
 
