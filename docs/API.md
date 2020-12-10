@@ -22,6 +22,8 @@ You can find a current copy of the OME API documentation [here](https://dl.dell.
 
 <li><a href="#invoke-discover-device">Invoke Discover Device</a></li>
 
+<li><a href="#invoke-manage-query-groups">Invoke Manage Query Groups</a></li>
+
 <li><a href="#new-mcm-group">New Mcm Group</a></li>
 
 <li><a href="#new-network">New Network</a></li>
@@ -66,8 +68,6 @@ You can find a current copy of the OME API documentation [here](https://dl.dell.
 
 <li><a href="#get-identitypool-usage">Get Identitypool Usage</a></li>
 
-<li><a href="#get-inventory-by-type">Get Inventory By Type</a></li>
-
 <li><a href="#get-report-list">Get Report List</a></li>
 
 <li><a href="#invoke-report-execution">Invoke Report Execution</a></li>
@@ -99,7 +99,7 @@ Deploy scripts include those things for discovery and generating the initial inv
 Add one or more hosts to an existing static group.
 
 #### Description
-This script exercises the OME REST API to add one or more hosts to an existing static group. You can provide specific
+This script uses the OME REST API to add one or more hosts to an existing static group. You can provide specific
  devices or you can provide the job ID for a previous discovery job containing a set of servers. The script will pull
  from the discovery job and add those servers to a gorup. For authentication X-Auth is used over Basic Authentication.
 Note: The credentials entered are not stored to disk.
@@ -175,7 +175,7 @@ PS C:\>$cred = Get-Credential
 Script to update an existing discovery job in OME
 
 #### Description
-This script exercises the OME REST API to update an existing discovery job(if found) with the credentials and also 
+This script uses the OME REST API to update an existing discovery job(if found) with the credentials and also
 it updates networkaddress if user passs iprange.
 For authentication X-Auth is used over Basic Authentication.
 Note that the credentials entered are not stored to disk.
@@ -214,9 +214,21 @@ PS C:\>$cred = Get-Credential
 Script to discover devices managed by OME Enterprise
 
 #### Description
-This script exercises the OME REST API to discover devices.
+
+Currently the PowerShell version of this script offers substantially more capability. See:
+https://github.com/dell/OpenManage-Enterprise/issues/119
+
+**Python**
+This script uses the OME REST API to discover devices.
 For authentication X-Auth is used over Basic Authentication.
 Note that the credentials entered are not stored to disk.
+
+**PowerShell**
+This script currently allows the discovery of servers, chassis, and network devices. Storage devices are not
+currently supported. If it would be helpful to you leave a comment on
+https://github.com/dell/OpenManage-Enterprise/issues/114 to let us know this is a priority for you. Currently only
+SNMPv2c is supported for network devices. It does not support SNMPv1 and OME does not currently support SNMPv3. If
+SNMPv1 is a priority for you please open an issue at https://github.com/dell/OpenManage-Enterprise/issues.
 
 #### Python Example
 ```bash
@@ -230,22 +242,74 @@ where {Device_Type} can be server,chassis
 
 #### PowerShell Example
 ```
-PS C:\>$cred = Get-Credential
-    $disccred = Get-Credential
-    .\Invoke-DiscoverDevice.ps1 -IpAddress "10.xx.xx.xx" -Credentials $cred -DeviceType {device_type}  
-    -IPAddressCsvFile .\xxxx.csv  -nodeCredentials $disccred
-     where {device_type} can be server/chassis
-     In this instance you will be prompted for credentials to use to
-     connect to the appliance
+PS C:\>$creds = Get-Credential # Your OME credentials
+    $servcreds = Get-Credential # Your OME credentials
+    .\Invoke-DiscoverDevice -IpAddress 192.168.1.93 -Credentials $creds -ServerIps 192.168.1.63-192.168.1.65 
+    -ServerCredentials $servcreds -GroupName TestGroup -JobCheckSleepInterval 10 -ServerCsv Book1.csv,'IP address' 
+    -ChassisCsv Book1.csv,'ChassisIp' -ChassisCredentials $chassiscreds
     
 
-    PS C:\>$cred = Get-Credential
-    .\Invoke-DiscoverDevice.ps1 -IpAddress "10.xx.xx.xx" -Credentials $cred -DeviceType {device_type} -IpArray 
-    10.xx.xx.xx,10.xx.xx.xx-10.yy.yy.yy,...
-     where {device_type} can be server/chassis
-     In this instance you will be prompted for credentials
+    PS C:\>.\Invoke-DiscoverDevice -IpAddress 192.168.1.93 -Credentials $creds -NetworkDeviceIps 
+    192.168.1.24,192.168.1.34 -SnmpCommunityString 'SomeString'
 
 ```
+
+
+---
+### Invoke Manage Query Groups
+
+#### Available Scripts
+
+- [invoke_manage_query_groups.py](../Core/Python/invoke_manage_query_groups.py)
+
+
+#### Synopsis
+Python script for using the OME API to manage query groups
+
+#### Description
+Provides limited support for creating query groups via the API. Right now it only has support for devices. If you have
+a use case requiring extension please comment on https://github.com/dell/OpenManage-Enterprise/issues/126 to let us
+know there is a demand for this capability. For details on functionality see workflow.
+
+##### WORKFLOW
+
+The first step to creating a filter is to obtain the relevant IDs from OME. These can change over time so you should
+get them from your specific instance. You can do this by running the script with the switch '--get-values'. This will
+create a file called ome_query_values.txt. This file contains a listing of OID, FID, and comparison-fields values
+available in your OME instance. FID corresponds to the field on which you want to query. For example, in my instance,
+if I were to go to the UI and select "Device Sub-Type", that would correspond to FID 238. If I want to check if A
+Device SubType were equivalent to something, I would use this value. Next you need to determine the value you are
+comparing against. In my instance, 151 corresponds to 'Compellent Storage'. If I wanted to create a query group looking
+ for devices with subtype 'Compellent Storage', I would pass the argument '--fid 238 --comparison-fields 151'. Finally,
+  you need a comparison operator. This is at the beginning of the file ome_query_values.txt. In my case, ID 1
+  corresponds to equivalence so I will pass --oid 1. If you want to chain multiple queries together you can use the
+  --loid argument. 1 corresponds to AND and 2 corresponds to OR. If you are chaining multiple filters, pass an loid
+  argument for each filter. For example if you want two filters to be related with an OR statement, pass 2,2.
+
+For example, if I wanted to create a group that finds devices with service tag AAAAAAA or has a normal device status,
+I could use --fid 231,229 --oid 1,1 --comparison-fields AAAAAAA,1000 --loid 2,2
+
+#### Python Examples
+```
+invoke_manage_query_groups.py --ip 192.168.0.120 -u admin -p admin --get-values
+Reach out to OME and obtain the supported values for --fid and --oid
+
+invoke_manage_query_groups.py --ip 192.168.0.120 -u admin -p admin --get-group-devices TestGroup
+Get a listing of devices in the group TestGroup and their characteristics
+
+invoke_manage_query_groups.py --ip 192.168.0.120 -u admin -p admin --get-group-filters TestGroup
+Get a listing of all the filters used by TestGroup
+
+invoke_manage_query_groups.py --ip 192.168.0.120 -u admin -p admin --create y --groupname "Grant Group" --description "query created using python OME script" --fid 238 --comparison-values 151 --oid 1
+Create a group called Grant Group which looks for devices equal to (1) sub-type (238) compellent storage (151)
+
+invoke_manage_query_groups.py --ip 192.168.0.120 -u admin -p admin --fid 231,229 --oid 1,1 --comparison-fields AAAAAAA,1000 --loid 2,2 --create "Service Tag or Normal Status"
+Create a group called "Service Tag or Normal Status" which looks for service tags (231) equal to (1) AAAAAAA or (2) device with status (229) equal to (1) normal status (1000)
+
+invoke_manage_query_groups.py --ip 192.168.0.120 -u admin -p admin --delete "Some Group"
+Deletes a group with the name "Some Group"
+```
+
 
 
 ---
@@ -316,7 +380,7 @@ PS C:\>$cred = Get-Credential
 Script to create a new network with VLAN
 
 #### Description
-This script exercises the OME REST API to create a new network
+This script uses the OME REST API to create a new network
 A network consists of a Minimum and Maximum VLAN ID to create a range
 Set Minimum and Maximum to the same value to a single VLAN
 
@@ -361,7 +425,7 @@ PS C:\>$cred = Get-Credential
 Script to create a new static group
 
 #### Description
-This script exercises the OME REST API to create a new static
+This script uses the OME REST API to create a new static
 group. The user is responsible for adding devices to the
 group once the group has been successfully created.
 For authentication X-Auth is used over Basic Authentication
@@ -374,11 +438,10 @@ Note that the credentials entered are not stored to disk.
 #### PowerShell Example
 ```
 PS C:\>$cred = Get-Credential
-    .\New-StaticGroup.ps1 -IpAddress "10.xx.xx.xx" -Credentials $cred
-         -GroupName "Test_OME_Group"
+    .\New-StaticGroup.ps1 -IpAddress "10.xx.xx.xx" -Credentials $cred -GroupName "Test_OME_Group"
     
 
-    PS C:\>.\New-StaticGroup.ps1 -IpAddress "10.xx.xx.xx" -GroupName "Test_OME"
+    PS C:\>.\New-StaticGroup.ps1 -IpAddress "10.xx.xx.xx" -GroupName "Test_OME" -GroupDescription "This is my group"
     In this instance you will be prompted for credentials to use
 
 ```
@@ -542,7 +605,7 @@ PS C:\>$cred = Get-Credential
  within a group using a DUP
 
 #### Description
- This script exercises the OME REST API to allow updating a device
+ This script uses the OME REST API to allow updating a device
  or a group of devices by using a single DUP file.
 
  Note that the credentials entered are not stored to disk.
@@ -659,7 +722,7 @@ PS C:\>$creds = Get-Credential
 
 
 #### Synopsis
-Retrieves the audit logs from a target OME instance and can either save them in an CSV on a fileshare or 
+Retrieves the audit logs from a target OME instance and can either save them in an CSV on a fileshare or
 print them to screen.
 
 #### Description
@@ -693,7 +756,7 @@ PS C:\>$cred1 = Get-Credentials
 Script to get chassis inventory details in CSV format
 
 #### Description
-This script exercises the OME REST API to get chassis inventory
+This script uses the OME REST API to get chassis inventory
 in a CSV format for external consumption
 Note that the credentials entered are not stored to disk.
 
@@ -727,7 +790,7 @@ PS C:\>$cred = Get-Credential
 Script to get the device inventory details
 
 #### Description
-This script exercises the OME REST API to get detailed inventory
+This script uses the OME REST API to get detailed inventory
 for a device given ID/Name/Service Tag
 and Inventory type (os,cpus,disks,memory,controllers) of the device
 Note that the credentials entered are not stored to disk.
@@ -768,7 +831,7 @@ PS C:\>$cred = Get-Credential
 Script to get the list of devices managed by OM Enterprise
 
 #### Description
-This script exercises the OME REST API to get a list of devices
+This script uses the OME REST API to get a list of devices
 currently being managed by that instance. For authentication X-Auth
 is used over Basic Authentication
 Note that the credentials entered are not stored to disk.
@@ -802,7 +865,7 @@ Gets a list of all firmware baselines available from an OME server or baselines 
 with a specific device.
 
 #### Description
-This script exercises the OME REST API to find baselines associated
+This script uses the OME REST API to find baselines associated
 with a given server. For authentication X-Auth is used over Basic
 Authentication. Note: The credentials entered are not stored to disk.
 
@@ -832,7 +895,7 @@ PS C:\>$cred = Get-Credential
 Script to get the details of groups managed by OM Enterprise
 
 #### Description
-This script exercises the OME REST API to get a group and the
+This script uses the OME REST API to get a group and the
 device details for all devices in that group. For authentication
 X-Auth is used over Basic Authentication
 Note that the credentials entered are not stored to disk.
@@ -871,7 +934,7 @@ Script to get the details of groups managed by OM Enterprise
 This script uses OData filters for extracting information
 
 #### Description
-This script exercises the OME REST API to get a group and the
+This script uses the OME REST API to get a group and the
 device details for all devices in that group. For authentication
 X-Auth is used over Basic Authentication
 Note that the credentials entered are not stored to disk.
@@ -910,7 +973,7 @@ PS C:\>$cred = Get-Credential
 Script to get the list of groups managed by OM Enterprise
 
 #### Description
-This script exercises the OME REST API to get a list of groups
+This script uses the OME REST API to get a list of groups
 currently being managed by that instance. For authentication X-Auth
 is used over Basic Authentication
 Note that the credentials entered are not stored to disk.
@@ -945,8 +1008,8 @@ PS C:\>$cred = Get-Credential
 Script to get the list of virtual addresses in an Identity Pool
 
 #### Description
-This script exercises the OME REST API to get a list of virtual addresses in an Identity Pool.
-Will export to a CSV file called IdentityPoolUsage.csv in the current directory. 
+This script uses the OME REST API to get a list of virtual addresses in an Identity Pool.
+Will export to a CSV file called IdentityPoolUsage.csv in the current directory.
 For authentication X-Auth is used over Basic Authentication
 Note that the credentials entered are not stored to disk.
 
@@ -979,34 +1042,6 @@ PS C:\>$cred = Get-Credential
 
 
 ---
-### Get Inventory By Type
-
-#### Available Scripts
-
-- [Get-InventoryByType.ps1](../Core/PowerShell/Get-InventoryByType.ps1)
-
-
-#### Synopsis
-Script to retrieve the inventory for a device by inventory type.
-#### Description
-This script exercises the OME REST API to get the inventory
-for a device by inventory type. The inventory type can be os 
-or cpus or controllers or memory or disks.
-Note that the credentials entered are not stored to disk.
-
-
-
-#### PowerShell Example
-```
-PS C:\>$cred = Get-Credential
-    .\Get-DeviceInventory.ps1 -IpAddress "10.xx.xx.xx" -Credentials
-     $cred -DeviceId 25627 -InventoryType {InventoryType}
-    where {InventoryType} can be cpus or memory or controllers or disks or os
-
-```
-
-
----
 ### Get Report List
 
 #### Available Scripts
@@ -1020,7 +1055,7 @@ PS C:\>$cred = Get-Credential
 Script to get the list of reports defined in OM Enterprise
 
 #### Description
-This script exercises the OME REST API to get a list of reports
+This script uses the OME REST API to get a list of reports
 currently defined in that instance. For authentication X-Auth
 is used over Basic Authentication
 Note that the credentials entered are not stored to disk.

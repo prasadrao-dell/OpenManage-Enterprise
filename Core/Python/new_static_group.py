@@ -21,7 +21,7 @@
 Script to create a new static group
 
 #### Description
-This script exercises the OME REST API to create a new static
+This script uses the OME REST API to create a new static
 group. The user is responsible for adding devices to the
 group once the group has been successfully created.
 For authentication X-Auth is used over Basic Authentication
@@ -34,6 +34,7 @@ import argparse
 import json
 import sys
 from argparse import RawTextHelpFormatter
+from getpass import getpass
 
 try:
     import urllib3
@@ -64,9 +65,13 @@ def authenticate(ome_ip_address: str, ome_username: str, ome_password: str) -> d
     user_details = {'UserName': ome_username,
                     'Password': ome_password,
                     'SessionType': 'API'}
-    session_info = requests.post(session_url, verify=False,
-                                 data=json.dumps(user_details),
-                                 headers=authenticated_headers)
+    try:
+        session_info = requests.post(session_url, verify=False,
+                                     data=json.dumps(user_details),
+                                     headers=authenticated_headers)
+    except requests.exceptions.ConnectionError:
+        print("Failed to connect to OME. This typically indicates a network connectivity problem. Can you ping OME?")
+        sys.exit(0)
 
     if session_info.status_code == 201:
         authenticated_headers['X-Auth-Token'] = session_info.headers['X-Auth-Token']
@@ -129,11 +134,13 @@ if __name__ == '__main__':
     parser.add_argument("--ip", "-i", required=True, help="OME Appliance IP")
     parser.add_argument("--user", "-u", required=False,
                         help="Username for OME Appliance", default="admin")
-    parser.add_argument("--password", "-p", required=True,
+    parser.add_argument("--password", "-p", required=False,
                         help="Password for OME Appliance")
     parser.add_argument("--groupname", "-g", required=True,
                         help="A valid name for the group")
     args = parser.parse_args()
+    if not args.password:
+        args.password = getpass()
 
     try:
         headers = authenticate(args.ip, args.user, args.password)

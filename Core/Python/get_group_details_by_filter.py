@@ -22,7 +22,7 @@ Script to get the details of groups managed by OM Enterprise
 This script uses OData filters for extracting information
 
 #### Description
-This script exercises the OME REST API to get a group and the
+This script uses the OME REST API to get a group and the
 device details for all devices in that group. For authentication
 X-Auth is used over Basic Authentication
 Note that the credentials entered are not stored to disk.
@@ -34,6 +34,7 @@ Note that the credentials entered are not stored to disk.
 import argparse
 import json
 from argparse import RawTextHelpFormatter
+from getpass import getpass
 
 import requests
 import urllib3
@@ -108,7 +109,7 @@ if __name__ == '__main__':
     parser.add_argument("--user", "-u", required=True,
                         help="Username for OME Appliance",
                         default="admin")
-    parser.add_argument("--password", "-p", required=True,
+    parser.add_argument("--password", "-p", required=False,
                         help="Password for OME Appliance")
     parser.add_argument("--filterby", "-fby", required=True,
                         choices=('Name', 'Description'),
@@ -116,5 +117,8 @@ if __name__ == '__main__':
     parser.add_argument("--field", "-f", required=True,
                         help="Field to filter by (group name or description)")
     args = parser.parse_args()
+    if not args.password:
+        args.password = getpass()
+
     get_group_details(args.ip, args.user, args.password,
                       str(args.filterby), str(args.field))

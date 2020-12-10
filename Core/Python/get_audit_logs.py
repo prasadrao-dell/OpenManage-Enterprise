@@ -18,7 +18,7 @@
 
 """
 #### Synopsis
-Retrieves the audit logs from a target OME instance and can either save them in an CSV on a fileshare or 
+Retrieves the audit logs from a target OME instance and can either save them in an CSV on a fileshare or
 print them to screen.
 
 #### Description
@@ -36,6 +36,7 @@ import sys
 from argparse import RawTextHelpFormatter
 from pprint import pprint
 from urllib.parse import urlparse
+from getpass import getpass
 
 try:
     import urllib3
@@ -79,9 +80,13 @@ def authenticate(ome_ip_address: str, ome_username: str, ome_password: str) -> d
     user_details = {'UserName': ome_username,
                     'Password': ome_password,
                     'SessionType': 'API'}
-    session_info = requests.post(session_url, verify=False,
-                                 data=json.dumps(user_details),
-                                 headers=authenticated_headers)
+    try:
+        session_info = requests.post(session_url, verify=False,
+                                     data=json.dumps(user_details),
+                                     headers=authenticated_headers)
+    except requests.exceptions.ConnectionError:
+        print("Failed to connect to OME. This typically indicates a network connectivity problem. Can you ping OME?")
+        sys.exit(0)
 
     if session_info.status_code == 201:
         authenticated_headers['X-Auth-Token'] = session_info.headers['X-Auth-Token']
@@ -93,7 +98,7 @@ def authenticate(ome_ip_address: str, ome_username: str, ome_password: str) -> d
                     "password, and IP?")
 
 
-def get_data(authenticated_headers: dict, url: str, odata_filter: str = None, max_pages: int = None) -> list:
+def get_data(authenticated_headers: dict, url: str, odata_filter: str = None, max_pages: int = None) -> dict:
     """
     This function retrieves data from a specified URL. Get requests from OME return paginated data. The code below
     handles pagination. This is the equivalent in the UI of a list of results that require you to go to different
@@ -105,7 +110,7 @@ def get_data(authenticated_headers: dict, url: str, odata_filter: str = None, ma
         odata_filter: An optional parameter for providing an odata filter to run against the API endpoint.
         max_pages: The maximum number of pages you would like to return
 
-    Returns: Returns a list of dictionaries of the data received from OME
+    Returns: Returns a dictionary of data received from OME
 
     """
 
@@ -117,12 +122,12 @@ def get_data(authenticated_headers: dict, url: str, odata_filter: str = None, ma
         if count_data.status_code == 400:
             print("Received an error while retrieving data from %s:" % url + '?$filter=' + odata_filter)
             pprint(count_data.json()['error'])
-            return []
+            return {}
 
         count_data = count_data.json()
         if count_data['@odata.count'] <= 0:
             print("No results found!")
-            return []
+            return {}
     else:
         count_data = requests.get(url, headers=authenticated_headers, verify=False).json()
 
@@ -149,7 +154,7 @@ def get_data(authenticated_headers: dict, url: str, odata_filter: str = None, ma
             requested_data = response.json()
             if requested_data['@odata.count'] <= 0:
                 print("No results found!")
-                return []
+                return {}
 
             # The @odata.nextLink key is only present in data if there are additional pages. We check for it and if it
             # is present we get a link to the page with the next set of results.
@@ -176,13 +181,16 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=RawTextHelpFormatter)
     parser.add_argument("--ip", "-i", required=True, help="OME Appliance IP")
     parser.add_argument("--user", "-u", required=False, help="Username for the OME Appliance", default="admin")
-    parser.add_argument("--password", "-p", required=True, help="Password for the OME Appliance")
+    parser.add_argument("--password", "-p", required=False, help="Password for the OME Appliance")
     parser.add_argument("--share", "-s", required=False,
                         help="A path to the share which you want to in format "
                              "\\\\<ip_address>\\<share_name>\\<file_name>")
     parser.add_argument("--smbuser", "-su", required=False, help="The username for SMB")
     parser.add_argument("--smbpass", "-sp", required=False, help="Password for SMB")
     args = parser.parse_args()
+
+    if not args.password:
+        args.password = getpass()
 
     try:
         headers = authenticate(args.ip, args.user, args.password)

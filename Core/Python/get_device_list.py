@@ -22,7 +22,7 @@
 Script to get the list of devices managed by OM Enterprise
 
 #### Description
-This script exercises the OME REST API to get a list of devices
+This script uses the OME REST API to get a list of devices
 currently being managed by that instance. For authentication X-Auth
 is used over Basic Authentication
 Note that the credentials entered are not stored to disk.
@@ -37,6 +37,7 @@ import json
 import os
 import sys
 from argparse import RawTextHelpFormatter
+from getpass import getpass
 
 import urllib3
 
@@ -59,8 +60,9 @@ class GetDeviceList:
             if not self.auth_success:
                 print("Unable to authenticate with OME .. Check IP/Username/Pwd")
                 return
-        except Exception:
-            print("Unable to connect to OME appliance %s" % self.__session_input["ip"])
+
+        except Exception as error:
+            print("Unable to connect to OME appliance %s. The error was %s" % (self.__session_input["ip"], error))
             return
 
         try:
@@ -192,7 +194,7 @@ if __name__ == '__main__':
     parser.add_argument("--ip", "-i", required=True, help="OME Appliance IP")
     parser.add_argument("--user", "-u", required=False,
                         help="Username for OME Appliance", default="admin")
-    parser.add_argument("--password", "-p", required=True,
+    parser.add_argument("--password", "-p", required=False,
                         help="Password for OME Appliance")
     parser.add_argument("--outformat", "-of", required=False, default="json",
                         choices=('json', 'csv'),
@@ -200,6 +202,8 @@ if __name__ == '__main__':
     parser.add_argument("--outpath", "-op", required=False, default="",
                         help="Path to output file")
     args = parser.parse_args()
+    if not args.password:
+        args.password = getpass()
 
     pool = urllib3.HTTPSConnectionPool(args.ip, port=443,
                                        cert_reqs='CERT_NONE', assert_hostname=False)

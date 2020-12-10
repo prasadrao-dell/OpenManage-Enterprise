@@ -9,7 +9,7 @@ We are working to standardize the repository. Any help would be welcomed with [u
 ## General Practices
 
 - Make sure any pull requests to the repo rebase cleanly without conflict on master
-- Commits should be signed off with your name in the format `Signed-off-by: FirstName LastName <gelante@someemail.domain` at the end. A good commit looks like this:
+- Commits should be signed off with your name in the format `Signed-off-by: FirstName LastName <gelante@someemail.domain>` at the end. A good commit looks like this:
 
         file_I_modified: General description of change <---- this is the title
         - If you didn't modify one specific file then use a descriptive message for the title
@@ -245,7 +245,7 @@ There is a great tutorial on writing good Python code [here](https://realpython.
         Script to create a new static group
 
         #### Description
-        This script exercises the OME REST API to create a new static
+        This script uses the OME REST API to create a new static
         group. The user is responsible for adding devices to the
         group once the group has been successfully created.
         For authentication X-Auth is used over Basic Authentication
@@ -305,7 +305,18 @@ There is a great tutorial on writing good Python code [here](https://realpython.
   - Constants should follow the pattern `A_CONSTANT`
 - If you need to print complex data use `pprint`
 - If you need an example to use as a template see [invoke_discover_device.py](Core/Python/invoke_discover_device.py)
+- Modules should leverage the getpass module so that the user can chose not to provide a password on the command line. Ex:
 
+        if args.password:
+            password = args.password
+        else:
+            password = getpass("Password for OME Appliance: ")
+        discover_user_name = args.targetUserName
+        if args.targetPassword:
+            discover_password = args.targetPassword
+        else:
+            discover_password: getpass("Password to discover devices: ")
+        
 ## Library Code
 
 Every script in this repository should be stand alone and copy and pastable. This has the unfortunate side effect of complicating code reuse. In an effort to standardize things we ask you use the standard functions we provide below for common tasks.

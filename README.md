@@ -1,6 +1,12 @@
 ## OME/OME-M and Plugin API Samples / Cookbooks
 
-This repository hosts cookbooks for OME/OME-M and associated plugins. For script samples specific to OME/OME-M please look for script samples contained in "Core". Plugin script samples are in the "Plugin" folder and categorized further by plugin name.
+This repository hosts cookbooks for OME/OME-M and associated plugins. Script examples specific to OME/OME-M are in the Core directory. Plugin script examples are in the "Plugin" folder and categorized further by plugin name.
+
+The Core directory is further subdivided into Python and PowerShell. We do our best to maintain functional equivalance between the two, but sometimes they differ. These differences are typically noted in [the docs](docs/API.md).
+
+## Ensure OME is up to date!
+
+There is a known bug in older versions of OME which casuses the API to target multiple hosts when only one or a few targets are specified. We suggest you update to 3.5.0 or higher.
 
 ## Script Documentation
 

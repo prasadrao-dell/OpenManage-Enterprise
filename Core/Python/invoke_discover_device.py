@@ -19,9 +19,21 @@
 Script to discover devices managed by OME Enterprise
 
 #### Description
-This script exercises the OME REST API to discover devices.
+
+Currently the PowerShell version of this script offers substantially more capability. See:
+https://github.com/dell/OpenManage-Enterprise/issues/119
+
+**Python**
+This script uses the OME REST API to discover devices.
 For authentication X-Auth is used over Basic Authentication.
 Note that the credentials entered are not stored to disk.
+
+**PowerShell**
+This script currently allows the discovery of servers, chassis, and network devices. Storage devices are not
+currently supported. If it would be helpful to you leave a comment on
+https://github.com/dell/OpenManage-Enterprise/issues/114 to let us know this is a priority for you. Currently only
+SNMPv2c is supported for network devices. It does not support SNMPv1 and OME does not currently support SNMPv3. If
+SNMPv1 is a priority for you please open an issue at https://github.com/dell/OpenManage-Enterprise/issues.
 
 #### Python Example
 ```bash
@@ -41,6 +53,7 @@ import sys
 import time
 from argparse import RawTextHelpFormatter
 from pprint import pprint
+from getpass import getpass
 
 try:
     import urllib3
@@ -71,9 +84,13 @@ def authenticate(ome_ip_address: str, ome_username: str, ome_password: str) -> d
     user_details = {'UserName': ome_username,
                     'Password': ome_password,
                     'SessionType': 'API'}
-    session_info = requests.post(session_url, verify=False,
-                                 data=json.dumps(user_details),
-                                 headers=authenticated_headers)
+    try:
+        session_info = requests.post(session_url, verify=False,
+                                     data=json.dumps(user_details),
+                                     headers=authenticated_headers)
+    except requests.exceptions.ConnectionError:
+        print("Failed to connect to OME. This typically indicates a network connectivity problem. Can you ping OME?")
+        sys.exit(0)
 
     if session_info.status_code == 201:
         authenticated_headers['X-Auth-Token'] = session_info.headers['X-Auth-Token']
@@ -332,11 +349,11 @@ if __name__ == '__main__':
     parser.add_argument("--user", required=False,
                         help="Username for OME Appliance",
                         default="admin")
-    parser.add_argument("--password", required=True,
+    parser.add_argument("--password", required=False,
                         help="Password for OME Appliance")
     parser.add_argument("--targetUserName", required=True,
                         help="Username to discover devices")
-    parser.add_argument("--targetPassword", required=True,
+    parser.add_argument("--targetPassword", required=False,
                         help="Password to discover devices")
     parser.add_argument("--deviceType", required=True,
                         choices=('server', 'chassis'),
@@ -349,9 +366,15 @@ if __name__ == '__main__':
     args = parser.parse_args()
     ip_address = args.ip
     user_name = args.user
-    password = args.password
+    if args.password:
+        password = args.password
+    else:
+        password = getpass("Password for OME Appliance: ")
     discover_user_name = args.targetUserName
-    discover_password = args.targetPassword
+    if args.targetPassword:
+        discover_password = args.targetPassword
+    else:
+        discover_password: getpass("Password to discover devices: ")
     ip_array = args.targetIpAddresses
     csv_file_path = args.targetIpAddrCsvFile
     device_type = args.deviceType
